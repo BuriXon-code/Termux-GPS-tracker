@@ -39,7 +39,7 @@ tracker $(echo $LOCATION) -r 100 -d 60 -p network -v 100
 
 ## Compatibility ...
 
-The script for proper operation requires installed and configured Termux: API together with the TEMRUX-UPA package, Bash package, locomotive access, installed SOX and JQ package.
+The script for proper operation requires installed and configured Termux:API together with the termux-api package, Bash package, access to location, installed sox and jq package.
 
 ![screenshot](/img2.jpg)
 
