@@ -43,6 +43,9 @@ The script requires specific parameters:
 > [!CAUTION]
 > If the file already exists, it will be **overwritten**.
 
+>[!WARNING]
+> The script opens the KML file upon startup, appends new waypoints after each measurement, and closes the KML document only when the script is stopped with CTRL+C. Stopping the script in any other way will result in file corruption.
+
 > [!TIP]
 > The saved KML file can be used in **Google Earth** or similar applications to visualize the traveled route.
 
