@@ -1,0 +1,254 @@
+#!/bin/bash
+
+# Termux-GPS-tracker (c) made by BuriXon-code 2025
+# version v2.0
+
+BEEP_VOLUME="40"
+SAVING=false
+DELAY="15"
+PROVIDER="gps"
+GREEN="\e[38;5;46m"
+YELLOW="\e[38;5;226m"
+RED="\e[38;5;196m"
+ORANGE="\e[38;5;214m"
+TEXT_COLOR="\e[38;5;45m"
+RESET_COLOR="\e[0m"
+
+abort() {
+	echo -e "\n${YELLOW}---${ORANGE}\n\nAborting\n\e[?25h"
+	if $SAVING; then
+		finish_kml
+	fi
+	termux-volume music 0
+	exit 1
+}
+
+print_usage() {
+	echo -e "${TEXT_COLOR}Usage:${RESET_COLOR} $(basename $0) -lt <latitude> -lg <longitude> -r <radius> -d <delay> -p <provider>"
+	echo "  -lt, --latitude    Latitude target (e.g., 51.5074)."
+	echo "  -lg, --longitude   Longitude target (e.g., -0.1278)."
+	echo "  -r, --radius       Radius in meters (only digits, e.g., 1000)."
+	echo "  -d, --delay        Delay between checks in seconds (1-3600) (default 15)."
+	echo "  -p, --provider     Location provider (gps, network, or passive) (default gps)."
+	echo "  -v, --volume       Volume for beeping soumd when reaching target (0-150) (default=40)."
+	echo "  -s, --save         Save step-to-step locations to specified KML file. (Using the same file name will overwrite it!)"
+	exit 1
+}
+
+calculate_distance() {
+	lat1=$1
+	lon1=$2
+	lat2=$3
+	lon2=$4
+
+	awk -v lat1="$lat1" -v lon1="$lon1" -v lat2="$lat2" -v lon2="$lon2" '
+	BEGIN {
+		pi = 3.141592653589793;
+		R = 6371000; # Promień Ziemi w metrach
+		dlat = (lat2 - lat1) * pi / 180;
+		dlon = (lon2 - lon1) * pi / 180;
+		lat1 = lat1 * pi / 180;
+		lat2 = lat2 * pi / 180;
+		a = sin(dlat / 2) ^ 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ^ 2;
+		c = 2 * atan2(sqrt(a), sqrt(1 - a));
+		print R * c;
+	}'
+}
+
+vibrate_intense() {
+	while true; do
+		termux-vibrate -f -d 1000
+		sleep 1
+	done
+}
+
+beeping() {
+	while true; do
+		play -q -n synth 0.1 sine 400 &>/dev/null
+		play -q -n synth 0.1 sine 430 &>/dev/null
+		play -q -n synth 0.1 sine 400 &>/dev/null
+		play -q -n synth 0.1 sine 430 &>/dev/null
+		play -q -n synth 0.1 sine 400 &>/dev/null
+		play -q -n synth 0.1 sine 450 &>/dev/null
+		play -q -n synth 0.1 sine 360 &>/dev/null
+		sleep 1.5
+	done
+}
+
+target_reached() {
+	echo -en "\e[?25h"
+	termux-volume music $BEEP_VOLUME
+	vibrate_intense &
+	beeping
+}
+
+error_vib() {
+	termux-vibrate -f -d 50
+	termux-vibrate -f -d 80
+	termux-vibrate -f -d 80
+}
+
+save_location_kml() {
+    local timestamp=$(date "+%m.%d %H:%M:%S")
+    local lat=$1
+    local lon=$2
+    local alt=$3
+
+    if [[ $(wc -c < "$SAVE_FILE") -le 1 ]]; then
+        cat <<EOF > "$SAVE_FILE"
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document>
+    <name>Termux-GPS-tracker v2.0 (c) by BuriXon-code</name>
+EOF
+	fi
+        cat <<EOF >> "$SAVE_FILE"
+    <Placemark>
+        <TimeStamp><when>$timestamp</when></TimeStamp>
+        <title>$timestamp</title>
+        <name>$timestamp</name>
+        <description>$timestamp</description>
+        <Point>
+            <coordinates>$lon,$lat,$alt</coordinates>
+        </Point>
+    </Placemark>
+EOF
+}
+
+finish_kml() {
+    if [[ $(wc -c < "$SAVE_FILE") -gt 300 && -f "$SAVE_FILE" ]]; then
+        echo "</Document>
+</kml>" >> "$SAVE_FILE"
+		echo -e "${GREEN}Saved in:${RESET_COLOR} "$SAVE_FILE"\n"
+	else
+		echo -e "${RED}Error:${RESET_COLOR} ${ORANGE}Some error occured while saving file....${RESET_COLOR}\n" >&2
+		exit 1
+    fi
+}
+
+main() {
+	echo -e "\e[?25l"
+	echo -e "${GREEN}Target:${RESET_COLOR} latitude $TARGET_LAT, longitude $TARGET_LON"
+	echo -e "${GREEN}Radius:${RESET_COLOR} ${RADIUS}m"
+	echo -e "${GREEN}Provider:${RESET_COLOR} $PROVIDER"
+	echo -e "${GREEN}Measurement Interval:${RESET_COLOR} ${DELAY}s"
+	echo -e "${GREEN}Beeping volume:${RESET_COLOR} ${BEEP_VOLUME}/150\n"
+	echo -e "${YELLOW}--- waiting...${RESET_COLOR}\n"
+
+	while true; do
+		location=$(timeout 15 termux-location -p "$PROVIDER" 2>/dev/null ) 2>/dev/null
+		curr_lat=$(echo "$location" | jq .latitude)
+		curr_lon=$(echo "$location" | jq .longitude)
+		curr_alt=$(echo "$location" | jq .altitude)
+
+		if [[ -z $curr_lat || -z $curr_lon ]]; then
+			echo -e "\e[2A\r${YELLOW}---\e[K\n\n${RED}Error:${RESET_COLOR} ${ORANGE}Failed to get location data.${RESET_COLOR}\n" >&2
+			echo -e "${YELLOW}--- waiting ...${RESET_COLOR}\n"
+			error_vib &
+			sleep "$DELAY"
+			continue
+		fi
+
+		echo -e "\e[2A\r${YELLOW}---${RESET_COLOR}\e[K\n"
+		echo -e "${TEXT_COLOR}Target Location:${RESET_COLOR} Lat: $TARGET_LAT, Lon: $TARGET_LON"
+		echo -e "${TEXT_COLOR}Current Location:${RESET_COLOR} Lat: $curr_lat, Lon: $curr_lon"
+		echo -e "${TEXT_COLOR}Current Time:${RESET_COLOR} $(date '+%d·%m — %A — %H:%M:%S')"
+		distance=$(calculate_distance "$curr_lat" "$curr_lon" "$TARGET_LAT" "$TARGET_LON")
+		distance=$(printf "%.2f" "$distance")
+		if $SAVING; then
+			save_location_kml "$curr_lat" "$curr_lon" "$curr_alt"
+			echo -e "${TEXT_COLOR}Saved in:${RESET_COLOR} "$SAVE_FILE""
+		else
+			echo
+		fi
+		echo -e "${TEXT_COLOR}Distance to Target:${RESET_COLOR} ${distance}m\n"
+		echo -e "${YELLOW}--- waiting ...${RESET_COLOR}\n"
+
+		if (( $(echo "$distance <= $RADIUS" | bc -l) )); then
+			echo -e "${GREEN}Within radius! Target reached!${RESET_COLOR}\n"
+			finish_kml
+			target_reached
+		fi
+
+		sleep "$DELAY"
+	done
+}
+
+while [[ $# -gt 0 ]]; do
+	case $1 in
+		-lt|--latitude)
+			TARGET_LAT=$2
+			shift 2
+		;;
+		-lg|--longitude)
+			TARGET_LON=$2
+			shift 2
+		;;
+		-r|--radius)
+			if [[ $2 =~ ^[0-9]+$ ]]; then
+				RADIUS=$2
+				else
+				echo -e "${RED}Error:${RESET_COLOR} ${ORANGE}Radius must be a positive integer.${RESET_COLOR}" >&2
+				exit 1
+			fi
+			shift 2
+		;;
+		-d|--delay)
+			DELAY=$2
+			if ! [[ $DELAY =~ ^[0-9]+$ && $DELAY -ge 1 && $DELAY -le 3600 ]]; then
+				echo -e "${RED}Error:${RESET_COLOR} ${ORANGE}Delay must be between 1 and 3600 seconds.${RESET_COLOR}" >&2
+				exit 1
+			fi
+			shift 2
+		;;
+		-p|--provider)
+			PROVIDER=$2
+			if [[ ! $PROVIDER =~ ^(gps|network|passive)$ ]]; then
+				echo -e "${RED}Error:${RESET_COLOR} ${ORANGE}Provider must be one of: gps, network, passive.${RESET_COLOR}" >&2
+				exit 1
+			fi
+			shift 2
+		;;
+		-v|--volume)
+			BEEP_VOLUME=$2
+			if ! [[ $BEEP_VOLUME =~ ^[0-9]+$ && $BEEP_VOLUME -ge 0 && $BEEP_VOLUME -le 150 ]]; then
+				echo -e "${RED}Error:${RESET_COLOR} ${ORANGE}Volume must be between 0 and 150.${RESET_COLOR}" >&2
+				exit 1
+			fi
+			shift 2
+		;;
+		-s|--save)
+			if [[ -z $2 ]]; then
+				echo -e "${RED}Error:${RESET_COLOR} ${ORANGE}Must specify output file!.\n${RESET_COLOR}" >&2
+				exit 1
+			fi
+			SAVE_FILE="$2"
+			mkdir -p "$(dirname "$SAVE_FILE")"
+			touch "$SAVE_FILE"
+			echo > "$SAVE_FILE"
+			SAVING=true
+			shift 2
+		;;
+		*)
+			echo -e "${RED}Error:${RESET_COLOR} ${ORANGE}Unknown option $1.\n${RESET_COLOR}" >&2
+			print_usage
+		;;
+	esac
+done
+
+if [[ -z $DELAY || -z $BEEP_VOLUME || -z $PROVIDER || -z $TARGET_LAT || -z $TARGET_LON || -z $RADIUS ]]; then
+	print_usage
+fi
+
+required_commands=("termux-location" "jq" "play" "awk" "termux-volume")
+
+for cmd in "${required_commands[@]}"; do
+	if ! command -v "$cmd" &>/dev/null; then
+		echo -e "\n${RED}Error:${RESET_COLOR} ${ORANGE}Command '$cmd' is not installed.${RESET_COLOR}" >&2
+		abort
+	fi
+done
+
+trap abort SIGINT
+
+main
