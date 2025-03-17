@@ -1,7 +1,19 @@
 #!/bin/bash
 
-# Termux-GPS-tracker (c) made by BuriXon-code 2025
-# version v2.1
+##############################################
+# Author: Kamil BuriXon Burek (BuriXon-code) #
+# Name: Termux-GPS-Tracker (c) 2025          #
+# Description: Calculating the distance to   #
+#              the designated target and     #
+#              saving location data.         #
+# Version: v 2.0                             #
+# Changelog: + save data to KML file         #
+#            + timeout on location retrieval #
+#            + verbose errors                #
+#            + prettier outputs formatting   #
+#            + more output informations      #
+# Todo: - - -                                #
+##############################################
 
 BEEP_VOLUME="40"
 SAVING=false
