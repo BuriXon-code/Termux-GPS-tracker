@@ -56,7 +56,7 @@ tracker -lt 12.34567 -lg 76.54321 -r 100 -d 60 -p network -v 100 -s /sdcard/rout
 Or using an environment variable:
 ```bash
 export LOCATION="-lt 12.34567 -lg 76.54321"
-tracker $(echo LOCATION) -r 100 -d 60 -p network -v 100 -s /sdcard/route.kml
+tracker $(echo $LOCATION) -r 100 -d 60 -p network -v 100 -s /sdcard/route.kml
 ```
 
 ![screenshot](/img2.jpg)
