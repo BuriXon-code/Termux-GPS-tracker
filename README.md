@@ -61,6 +61,9 @@ tracker $(echo $LOCATION) -r 100 -d 60 -p network -v 100 -s /sdcard/route.kml
 
 ![screenshot](/img2.jpg)
 
+> [!NOTE]  
+> You can open the .kml file created by the script, for example, in Google Earth or Google My Map in your browser.  
+
 ## Compatibility
 For proper functionality, ensure the following packages are installed in Termux:
 - **Termux:API** with `termux-api` package
